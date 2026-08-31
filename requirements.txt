@@ -1,0 +1,15 @@
+﻿geopandas
+osmnx
+networkx
+h3
+h3pandas
+pulp
+gtfs-kit
+contextily
+scipy
+rasterio
+rasterstats
+folium
+streamlit
+pydeck
+matplotlib
