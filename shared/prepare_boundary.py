@@ -10,7 +10,12 @@ UTM43N = "EPSG:32643"
 def prepare_wards():
     wards = gpd.read_file(RAW_WARDS)
     wards["ward_id"] = wards["Ward_No"].astype(str).str.strip()
-    dupes = wards["ward_id"].duplicated(keep=False) | (wards["ward_id"] == "")
+    dupes = (
+        wards["ward_id"].isna()
+        | (wards["ward_id"].astype(str).str.lower() == "nan")
+        | (wards["ward_id"] == "")
+        | wards["ward_id"].duplicated(keep=False)
+    )
     wards.loc[dupes, "ward_id"] = "W" + wards.loc[dupes].index.astype(str)
     wards = wards.rename(columns={"Ward_Name": "ward_name"})[["ward_id", "ward_name", "geometry"]]
     wards = wards.set_crs("EPSG:4326", allow_override=True).to_crs(UTM43N)
