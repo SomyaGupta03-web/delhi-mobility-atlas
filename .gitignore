@@ -1,8 +1,9 @@
 ﻿.venv/
 __pycache__/
 *.pyc
-data/raw/
-data/interim/
+**/data/raw/
+**/data/interim/
+**/cache/
 *.graphml
 *.tif
 .ipynb_checkpoints/
