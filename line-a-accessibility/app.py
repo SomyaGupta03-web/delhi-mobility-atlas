@@ -117,7 +117,6 @@ rust_rgb = np.array([185, 78, 34])
 colors = np.outer(1 - norm, teal_rgb) + np.outer(norm, rust_rgb)
 wards["fill_color"] = [[int(r), int(g), int(b), 205] for r, g, b in colors]
 wards["metric_display"] = vals.round(1)
-wards["elevation"] = (norm * 1600).astype(int)
 
 n_wards = len(wards)
 worst_val = vals.max()
@@ -134,43 +133,39 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------- The map: 3D skyline of hardship ----------------
+# ---------------- The map ----------------
 layers = [
     pdk.Layer(
         "GeoJsonLayer",
         data=wards.__geo_interface__,
         get_fill_color="properties.fill_color",
-        get_line_color=[30, 42, 51, 100],
-        line_width_min_pixels=0.4,
-        extruded=True,
-        get_elevation="properties.elevation",
-        elevation_scale=1,
+        get_line_color=[30, 42, 51, 120],
+        line_width_min_pixels=0.5,
         pickable=True,
         auto_highlight=True,
-        highlight_color=[255, 255, 255, 90],
+        highlight_color=[255, 255, 255, 110],
     )
 ]
 
-MARKER_Z = 1700
 poi_specs = [(show_health, "health", [217, 95, 60]), (show_edu, "education", [60, 107, 110]), (show_market, "market", [140, 60, 180])]
 for show, label, color in poi_specs:
     if show and pois.get(label) is not None:
         gdf = pois[label]
         layers.append(pdk.Layer(
             "ScatterplotLayer",
-            data=pd.DataFrame({"lon": gdf.geometry.x, "lat": gdf.geometry.y, "z": MARKER_Z}),
-            get_position=["lon", "lat", "z"],
+            data=pd.DataFrame({"lon": gdf.geometry.x, "lat": gdf.geometry.y}),
+            get_position=["lon", "lat"],
             get_fill_color=color + [210],
             get_radius=45,
             pickable=False,
         ))
 
-view_state = pdk.ViewState(latitude=28.61, longitude=77.21, zoom=9.6, pitch=45, bearing=-10)
+view_state = pdk.ViewState(latitude=28.61, longitude=77.21, zoom=9.6)
 if selected_ward != "(none)":
     match = wards[wards["ward_name"] == selected_ward]
     if len(match):
         c = match.geometry.iloc[0].centroid
-        view_state = pdk.ViewState(latitude=c.y, longitude=c.x, zoom=13, pitch=45)
+        view_state = pdk.ViewState(latitude=c.y, longitude=c.x, zoom=13)
 
 st.pydeck_chart(
     pdk.Deck(
@@ -187,7 +182,7 @@ st.pydeck_chart(
 )
 st.markdown(f"""
 <div class="legend-box">
-  Taller/rust = worse on <b>{METRICS[metric][0]}</b>, shorter/teal = better &nbsp;|&nbsp;
+  Rust = worse on <b>{METRICS[metric][0]}</b>, teal = better &nbsp;|&nbsp;
   {'<span style="color:#D95F3C">&#9679;</span> Hospitals &nbsp;' if show_health else ''}
   {'<span style="color:#3C6B6E">&#9679;</span> Schools &nbsp;' if show_edu else ''}
   {'<span style="color:#8C3CB4">&#9679;</span> Markets' if show_market else ''}

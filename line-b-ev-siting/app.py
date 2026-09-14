@@ -89,7 +89,7 @@ with st.sidebar:
     chosen = scenarios[K]
 
     st.markdown("---")
-    show_demand = st.checkbox("Demand heatmap (3D)", value=True)
+    show_demand = st.checkbox("Demand heatmap", value=True)
     show_coverage = st.checkbox("Coverage radius (3km)", value=True)
     show_existing = st.checkbox("Existing chargers", value=True)
     show_new = st.checkbox("Proposed new sites", value=True)
@@ -114,51 +114,48 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------- The map: 3D demand skyline + coverage bubbles ----------------
+# ---------------- The map: demand heatmap + coverage bubbles ----------------
 vals = grid["demand_score"].astype(float)
 norm = ((vals - vals.min()) / (vals.max() - vals.min() + 1e-9)).clip(0, 1)
 low = np.array([239, 234, 220])
 high = np.array([185, 78, 34])
 grid_colors = np.outer(1 - norm, low) + np.outer(norm, high)
-grid["fill_color"] = [[int(r), int(g), int(b), 200] for r, g, b in grid_colors]
-grid["elevation"] = (norm * 1800).astype(int)
+grid["fill_color"] = [[int(r), int(g), int(b), 190] for r, g, b in grid_colors]
 
 layers = []
 if show_demand:
     layers.append(pdk.Layer(
         "GeoJsonLayer", data=grid.__geo_interface__, get_fill_color="properties.fill_color",
-        get_line_color=[218, 212, 195, 60], line_width_min_pixels=0.2,
-        extruded=True, get_elevation="properties.elevation", elevation_scale=1, pickable=False,
+        get_line_color=[218, 212, 195, 90], line_width_min_pixels=0.3, pickable=False,
     ))
-MARKER_Z = 2000  # float above the tallest hex column (max elevation 1800) so points aren't buried
-GROUND_Z = 5      # coverage bubbles stay near-ground, just enough to avoid z-fighting with hexes
-
 if show_coverage and show_existing:
+    existing_coverage = existing.to_crs(32643).geometry.buffer(3000).union_all()
+    existing_coverage_gdf = gpd.GeoDataFrame(geometry=[existing_coverage], crs=32643).to_crs(4326)
     layers.append(pdk.Layer(
-        "ScatterplotLayer",
-        data=pd.DataFrame({"lon": existing.geometry.x, "lat": existing.geometry.y, "z": GROUND_Z}),
-        get_position=["lon", "lat", "z"], get_fill_color=[75, 87, 96, 28], get_radius=3000, pickable=False,
+        "GeoJsonLayer", data=existing_coverage_gdf.__geo_interface__,
+        get_fill_color=[75, 87, 96, 85], stroked=False, pickable=False,
     ))
 if show_existing:
     layers.append(pdk.Layer(
         "ScatterplotLayer",
-        data=pd.DataFrame({"lon": existing.geometry.x, "lat": existing.geometry.y, "z": MARKER_Z}),
-        get_position=["lon", "lat", "z"], get_fill_color=[75, 87, 96, 230], get_radius=90, pickable=False,
+        data=pd.DataFrame({"lon": existing.geometry.x, "lat": existing.geometry.y}),
+        get_position=["lon", "lat"], get_fill_color=[75, 87, 96, 230], get_radius=70, pickable=False,
     ))
 if show_coverage and show_new:
+    new_coverage = chosen.to_crs(32643).geometry.buffer(3000).union_all()
+    new_coverage_gdf = gpd.GeoDataFrame(geometry=[new_coverage], crs=32643).to_crs(4326)
     layers.append(pdk.Layer(
-        "ScatterplotLayer",
-        data=pd.DataFrame({"lon": chosen.geometry.x, "lat": chosen.geometry.y, "z": GROUND_Z}),
-        get_position=["lon", "lat", "z"], get_fill_color=[60, 107, 110, 45], get_radius=3000, pickable=False,
+        "GeoJsonLayer", data=new_coverage_gdf.__geo_interface__,
+        get_fill_color=[60, 107, 110, 95], stroked=False, pickable=False,
     ))
 if show_new:
     chosen_df = pd.DataFrame({
-        "lon": chosen.geometry.x, "lat": chosen.geometry.y, "z": MARKER_Z,
+        "lon": chosen.geometry.x, "lat": chosen.geometry.y,
         "demand_score": chosen["demand_score"].round(2), "source": chosen["source"],
     })
     layers.append(pdk.Layer(
-        "ScatterplotLayer", data=chosen_df, get_position=["lon", "lat", "z"],
-        get_fill_color=[60, 107, 110, 250], get_radius=260, get_line_color=[255, 255, 255], line_width_min_pixels=2,
+        "ScatterplotLayer", data=chosen_df, get_position=["lon", "lat"],
+        get_fill_color=[60, 107, 110, 250], get_radius=200, get_line_color=[255, 255, 255], line_width_min_pixels=2,
         stroked=True, pickable=True,
     ))
 
@@ -166,7 +163,7 @@ st.pydeck_chart(
     pdk.Deck(
         map_provider="carto",
         map_style="light",
-        initial_view_state=pdk.ViewState(latitude=28.61, longitude=77.21, zoom=9.6, pitch=45, bearing=-10),
+        initial_view_state=pdk.ViewState(latitude=28.61, longitude=77.21, zoom=9.6),
         layers=layers,
         tooltip={
             "html": "<b>Proposed site</b><br/>Demand score: {demand_score}<br/>Source: {source}",
@@ -177,10 +174,10 @@ st.pydeck_chart(
 )
 st.markdown(f"""
 <div class="legend-box">
-  Taller/darker hex = higher demand &nbsp;|&nbsp;
+  Darker hex = higher demand &nbsp;|&nbsp;
   <span style="color:#4B5760">&#9679;</span> Existing charger &nbsp;|&nbsp;
   <span style="color:{TEAL}">&#9679;</span> Proposed new site (K={K}) &nbsp;|&nbsp;
-  faint circles = 3km service radius — gaps between circles are the uncovered demand
+  shaded zones = 3km service radius — bare/bright hexes outside the shading are the uncovered demand
 </div>
 """, unsafe_allow_html=True)
 
@@ -192,8 +189,8 @@ st.markdown(
     Service radius matters more than station count. A 5km radius alone covers 37–49% of demand
     <i>regardless of K</i>, while a 1.5km radius tops out at just 13.6% even with 40 stations. At the
     realistic 3km radius, {K} new sites close {pct_covered:.1f}% of the coverage gap — visible above as new
-    teal bubbles filling the empty space between existing grey ones, concentrated where the demand skyline
-    peaks highest.
+    teal bubbles filling the empty space between existing grey ones, concentrated where demand (darker hexes)
+    is highest.
     </div>
     """,
     unsafe_allow_html=True,
